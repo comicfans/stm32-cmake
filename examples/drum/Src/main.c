@@ -81,7 +81,7 @@ static void MX_TIM1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define ADC_CHANNEL_BUFFER_LENGTH (1)
+#define ADC_CHANNEL_BUFFER_LENGTH (2)
 
 #define ADC_HW_CHANNEL (4)
 
@@ -112,7 +112,7 @@ volatile uint8_t ADC_HAS_VALUE = 0;
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) { ADC_HAS_VALUE = 1; }
 
 #define COMPONENT (3)
-#define MUX_SHOW (2)
+#define MUX_SHOW (1)
 
 Segment adc_segments[MUX_SHOW] = {0};
 /* USER CODE END 0 */
@@ -126,12 +126,12 @@ typedef struct {
 size_t board_get_unique_id(uint8_t id[], size_t max_len) {
   (void)max_len;
   volatile uint32_t *stm32_uuid = (volatile uint32_t *)UID_BASE;
+  uint32_t *id32 = (uint32_t *)(uintptr_t)id;
   uint8_t const len = 12;
 
-  for (int i = 0; i < 3; i++) {
-    uint32_t w = stm32_uuid[i];
-    memcpy(&id[i * 4], &w, 4);
-  }
+  id32[0] = stm32_uuid[0];
+  id32[1] = stm32_uuid[1];
+  id32[2] = stm32_uuid[2];
 
   return len;
 }
@@ -185,6 +185,7 @@ void adc_stream_out(AdcStreamOut *output, Segment segment) {
   for (int i = 0; i < COMPONENT; ++i) {
     putchar(cast[i] & 0xFF);
     putchar(cast[i] >> 8);
+    fflush(stdout);
   }
 
   if (output->channel_idx == MUX_SHOW - 1) {
@@ -266,7 +267,6 @@ int main(void) {
     /* USER CODE END WHILE */
 
     tud_task();
-    continue;
 
     for (int adc_idx = 0; adc_idx < 2; ++adc_idx) {
       uint16_t dma_pos =
@@ -282,7 +282,9 @@ int main(void) {
             continue;
           }
 
-          uint16_t v16 = ADC_SAMPLE_BUFFER[adc_idx][j] << 4;
+          uint16_t v16 = (ADC_SAMPLE_BUFFER[adc_idx][j] << 4) |
+                         (ADC_SAMPLE_BUFFER[adc_idx][j] >> 8);
+          // uint16_t v16 = (ADC_SAMPLE_BUFFER[adc_idx][j] << 4);
 
           adc_segments[channel].val = v16;
           if (stream_out.segment_idx == 0) {
@@ -611,7 +613,7 @@ static void MX_TIM1_Init(void) {
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 16999;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 9999;
+  htim1.Init.Period = 9;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
