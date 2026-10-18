@@ -82,6 +82,8 @@ target_link_libraries(stm32-fetch-g4
     HAL::STM32::G4::OPAMP
     HAL::STM32::G4::CORTEX
     HAL::STM32::G4::PCDEx
+    HAL::STM32::G4::TIMEx
+    HAL::STM32::G4::DMA
     HAL::STM32::G4::LL_USB
     STM32::NoSys)
 
