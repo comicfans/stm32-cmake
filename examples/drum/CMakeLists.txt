@@ -54,7 +54,8 @@ set(TINYUSB_SOURCES
     tinyusb/src/class/cdc/cdc_device.h
     tinyusb/src/class/cdc/cdc_device.c
 
-    tinyusb/hw/bsp/board.c
+    #tinyusb/hw/bsp/stm32g4/family.c
+    #tinyusb/hw/bsp/board.c
     tinyusb/hw/bsp/board_api.h
 
 )
@@ -64,7 +65,7 @@ set(PROJECT_SOURCES
     Src/main.c
     Src/stm32g4xx_hal_msp.c
     Src/stm32g4xx_it.c
-    config/usb_descriptors.c
+    Src/usb_descriptors.c
     #Src/system_stm32g4xx.c
 )
 

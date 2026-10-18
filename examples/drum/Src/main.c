@@ -18,9 +18,14 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "bsp/board_api.h"
 #include "tusb.h"
+#include <stdint.h>
+#include <stdio.h>
 #include <stm32g4xx_hal_dac.h>
+#include <stm32g4xx_hal_dma.h>
 #include <stm32g4xx_hal_tim.h>
+#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -80,15 +85,116 @@ static void MX_TIM1_Init(void);
 
 #define ADC_HW_CHANNEL (4)
 
-#define ADC_HW_LENGTH (ADC_HW_CHANNEL * ADC_CHANNEL_BUFFER_LENGTH)
+#define ADC_HW_INSTANCE (2)
 
-static uint16_t ADC_SAMPLE_BUFFER[2][ADC_HW_LENGTH] = {0};
+#define ADC_INSTANCE_LENGTH (ADC_HW_CHANNEL * ADC_CHANNEL_BUFFER_LENGTH)
+
+#define UPLOAD_EVERY (1)
+
+#ifndef MIN
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#endif
+
+#ifndef MAX
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#endif
+
+typedef struct {
+  uint16_t val;
+  uint16_t min;
+  uint16_t max;
+} Segment;
+
+static uint16_t ADC_SAMPLE_BUFFER[ADC_HW_INSTANCE][ADC_INSTANCE_LENGTH] = {0};
 
 volatile uint8_t ADC_HAS_VALUE = 0;
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) { ADC_HAS_VALUE = 1; }
 
+#define COMPONENT (3)
+#define MUX_SHOW (2)
+
+Segment adc_segments[MUX_SHOW] = {0};
 /* USER CODE END 0 */
+
+typedef struct {
+  uint32_t packet_number;
+  uint16_t segment_idx;
+  uint16_t channel_idx;
+} AdcStreamOut;
+
+size_t board_get_unique_id(uint8_t id[], size_t max_len) {
+  (void)max_len;
+  volatile uint32_t *stm32_uuid = (volatile uint32_t *)UID_BASE;
+  uint8_t const len = 12;
+
+  for (int i = 0; i < 3; i++) {
+    uint32_t w = stm32_uuid[i];
+    memcpy(&id[i * 4], &w, 4);
+  }
+
+  return len;
+}
+
+int _write(int file, char *ptr, int len) {
+  (void)file;
+
+  if (!tud_cdc_connected()) {
+    return len;
+  }
+
+  for (int i = 0; i < len; i++) {
+    while (tud_cdc_write_available() == 0) {
+      tud_task();
+      if (!tud_cdc_connected()) {
+        return len;
+      }
+    }
+    tud_cdc_write_char(ptr[i]);
+  }
+
+  tud_cdc_write_flush();
+  return len;
+}
+
+void adc_stream_out(AdcStreamOut *output, Segment segment) {
+
+  if (output->segment_idx != UPLOAD_EVERY - 1) {
+    if (output->channel_idx == MUX_SHOW - 1) {
+      ++output->segment_idx;
+      output->segment_idx %= UPLOAD_EVERY;
+    }
+    output->channel_idx += 1;
+    output->channel_idx %= MUX_SHOW;
+    return;
+  }
+
+  if (output->channel_idx == 0) {
+    putchar('A');
+    putchar('D');
+    putchar('C');
+    putchar('5');
+  }
+
+  putchar(output->packet_number & 0xFF);
+  putchar((output->packet_number & 0xFF00) >> 8);
+  putchar((output->packet_number & 0xFF0000) >> 16);
+  putchar((output->packet_number & 0xFF000000) >> 24);
+
+  uint16_t *cast = (uint16_t *)(&segment);
+  for (int i = 0; i < COMPONENT; ++i) {
+    putchar(cast[i] & 0xFF);
+    putchar(cast[i] >> 8);
+  }
+
+  if (output->channel_idx == MUX_SHOW - 1) {
+    ++output->packet_number;
+    output->segment_idx = 0;
+  }
+
+  output->channel_idx++;
+  output->channel_idx %= MUX_SHOW;
+}
 
 /**
  * @brief  The application entry point.
@@ -132,25 +238,72 @@ int main(void) {
   HAL_OPAMP_Start(&hopamp6);
   HAL_DAC_SetValue(&hdac3, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 2047);
 
-  HAL_ADC_Start_DMA(&hdma_adc1, (uint32_t *)(&ADC_SAMPLE_BUFFER[0][0]),
-                    ADC_HW_LENGTH);
+  HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
+  HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
 
-  HAL_ADC_Start_DMA(&hdma_adc2, (uint32_t *)(&ADC_SAMPLE_BUFFER[1][0]),
-                    ADC_HW_LENGTH);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t *)(&ADC_SAMPLE_BUFFER[0][0]),
+                    ADC_INSTANCE_LENGTH);
+
+  HAL_ADC_Start_DMA(&hadc2, (uint32_t *)(&ADC_SAMPLE_BUFFER[1][0]),
+                    ADC_INSTANCE_LENGTH);
 
   HAL_TIM_Base_Start(&htim1);
 
   tusb_rhport_init_t dev_init = {.role = TUSB_ROLE_DEVICE,
-                                 .speed = TUSB_SPEED_HIGH};
+                                 .speed = TUSB_SPEED_FULL};
   tusb_init(0, &dev_init);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  DMA_HandleTypeDef *dma[ADC_HW_INSTANCE] = {&hdma_adc1, &hdma_adc2};
+  uint16_t cpu_pos[ADC_HW_INSTANCE] = {0};
+
+  AdcStreamOut stream_out = {0};
+
   while (1) {
     /* USER CODE END WHILE */
 
     tud_task();
+    continue;
+
+    for (int adc_idx = 0; adc_idx < 2; ++adc_idx) {
+      uint16_t dma_pos =
+          ADC_INSTANCE_LENGTH - __HAL_DMA_GET_COUNTER(dma[adc_idx]);
+
+      bool wrap = dma_pos < cpu_pos[adc_idx];
+      uint16_t end_pos = (wrap ? ADC_INSTANCE_LENGTH : dma_pos);
+
+      while (true) {
+        for (uint16_t j = cpu_pos[adc_idx]; j < end_pos; ++j) {
+          int channel = adc_idx * ADC_HW_CHANNEL + j % ADC_HW_CHANNEL;
+          if (channel >= MUX_SHOW) {
+            continue;
+          }
+
+          uint16_t v16 = ADC_SAMPLE_BUFFER[adc_idx][j] << 4;
+
+          adc_segments[channel].val = v16;
+          if (stream_out.segment_idx == 0) {
+            adc_segments[channel].min = v16;
+            adc_segments[channel].max = v16;
+          } else {
+            adc_segments[channel].min = MIN(v16, adc_segments[channel].min);
+            adc_segments[channel].max = MAX(v16, adc_segments[channel].max);
+          }
+          adc_stream_out(&stream_out, adc_segments[channel]);
+        }
+        cpu_pos[adc_idx] = end_pos % ADC_INSTANCE_LENGTH;
+
+        if (!wrap) {
+          break;
+        }
+        wrap = false;
+        end_pos = dma_pos;
+      }
+    }
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -469,7 +622,7 @@ static void MX_TIM1_Init(void) {
   if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK) {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
   sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK) {
