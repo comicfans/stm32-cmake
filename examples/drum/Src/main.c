@@ -22,6 +22,7 @@
 #include "tusb.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <stm32g4xx_hal_adc.h>
 #include <stm32g4xx_hal_dac.h>
 #include <stm32g4xx_hal_dma.h>
 #include <stm32g4xx_hal_tim.h>
@@ -91,6 +92,10 @@ static void MX_TIM1_Init(void);
 
 #define UPLOAD_EVERY (1)
 
+#define CHANNEL_FREQ (1000)
+
+#define SYSCLK (170000000)
+
 #ifndef MIN
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #endif
@@ -112,9 +117,9 @@ volatile uint8_t ADC_HAS_VALUE = 0;
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) { ADC_HAS_VALUE = 1; }
 
 #define COMPONENT (3)
-#define MUX_SHOW (1)
+#define CHANNEL_COUNT (4)
 
-Segment adc_segments[MUX_SHOW] = {0};
+Segment adc_segments[CHANNEL_COUNT] = {0};
 /* USER CODE END 0 */
 
 typedef struct {
@@ -160,12 +165,12 @@ int _write(int file, char *ptr, int len) {
 void adc_stream_out(AdcStreamOut *output, Segment segment) {
 
   if (output->segment_idx != UPLOAD_EVERY - 1) {
-    if (output->channel_idx == MUX_SHOW - 1) {
+    if (output->channel_idx == CHANNEL_COUNT - 1) {
       ++output->segment_idx;
       output->segment_idx %= UPLOAD_EVERY;
     }
     output->channel_idx += 1;
-    output->channel_idx %= MUX_SHOW;
+    output->channel_idx %= CHANNEL_COUNT;
     return;
   }
 
@@ -174,12 +179,12 @@ void adc_stream_out(AdcStreamOut *output, Segment segment) {
     putchar('D');
     putchar('C');
     putchar('5');
+    // ADC5 has one packet counter followed by all channel summaries.
+    putchar(output->packet_number & 0xFF);
+    putchar((output->packet_number & 0xFF00) >> 8);
+    putchar((output->packet_number & 0xFF0000) >> 16);
+    putchar((output->packet_number & 0xFF000000) >> 24);
   }
-
-  putchar(output->packet_number & 0xFF);
-  putchar((output->packet_number & 0xFF00) >> 8);
-  putchar((output->packet_number & 0xFF0000) >> 16);
-  putchar((output->packet_number & 0xFF000000) >> 24);
 
   uint16_t *cast = (uint16_t *)(&segment);
   for (int i = 0; i < COMPONENT; ++i) {
@@ -188,13 +193,13 @@ void adc_stream_out(AdcStreamOut *output, Segment segment) {
     fflush(stdout);
   }
 
-  if (output->channel_idx == MUX_SHOW - 1) {
+  if (output->channel_idx == CHANNEL_COUNT - 1) {
     ++output->packet_number;
     output->segment_idx = 0;
   }
 
   output->channel_idx++;
-  output->channel_idx %= MUX_SHOW;
+  output->channel_idx %= CHANNEL_COUNT;
 }
 
 /**
@@ -278,7 +283,7 @@ int main(void) {
       while (true) {
         for (uint16_t j = cpu_pos[adc_idx]; j < end_pos; ++j) {
           int channel = adc_idx * ADC_HW_CHANNEL + j % ADC_HW_CHANNEL;
-          if (channel >= MUX_SHOW) {
+          if (channel >= CHANNEL_COUNT) {
             continue;
           }
 
@@ -613,7 +618,7 @@ static void MX_TIM1_Init(void) {
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 16999;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 9;
+  htim1.Init.Period = SYSCLK / (1 + 16999) / CHANNEL_FREQ - 1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
