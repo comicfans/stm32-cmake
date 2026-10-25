@@ -92,6 +92,8 @@ static void MX_TIM1_Init(void);
 
 #define UPLOAD_EVERY (1)
 
+#define ADC_PRESCALER (16999)
+
 #define CHANNEL_FREQ (1000)
 
 #define SYSCLK (170000000)
@@ -390,7 +392,8 @@ static void MX_ADC1_Init(void) {
   hadc1.Init.LowPowerAutoWait = DISABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.NbrOfConversion = 4;
-  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.DiscontinuousConvMode = ENABLE;
+  hadc1.Init.NbrOfDiscConversion = 1;
   hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T1_TRGO;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
   hadc1.Init.DMAContinuousRequests = ENABLE;
@@ -411,7 +414,7 @@ static void MX_ADC1_Init(void) {
    */
   sConfig.Channel = ADC_CHANNEL_1;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_12CYCLES_5;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
@@ -429,7 +432,7 @@ static void MX_ADC1_Init(void) {
 
   /** Configure Regular Channel
    */
-  sConfig.Channel = ADC_CHANNEL_3;
+  sConfig.Channel = ADC_CHANNEL_4;
   sConfig.Rank = ADC_REGULAR_RANK_3;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
     Error_Handler();
@@ -437,7 +440,7 @@ static void MX_ADC1_Init(void) {
 
   /** Configure Regular Channel
    */
-  sConfig.Channel = ADC_CHANNEL_4;
+  sConfig.Channel = ADC_CHANNEL_3;
   sConfig.Rank = ADC_REGULAR_RANK_4;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
     Error_Handler();
@@ -476,7 +479,8 @@ static void MX_ADC2_Init(void) {
   hadc2.Init.LowPowerAutoWait = DISABLE;
   hadc2.Init.ContinuousConvMode = DISABLE;
   hadc2.Init.NbrOfConversion = 4;
-  hadc2.Init.DiscontinuousConvMode = DISABLE;
+  hadc2.Init.DiscontinuousConvMode = ENABLE;
+  hadc2.Init.NbrOfDiscConversion = 1;
   hadc2.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T1_TRGO;
   hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
   hadc2.Init.DMAContinuousRequests = ENABLE;
@@ -616,9 +620,10 @@ static void MX_TIM1_Init(void) {
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 16999;
+  htim1.Init.Prescaler = ADC_PRESCALER;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = SYSCLK / (1 + 16999) / CHANNEL_FREQ - 1;
+  htim1.Init.Period =
+      SYSCLK / (1 + ADC_PRESCALER) / (CHANNEL_FREQ * ADC_HW_CHANNEL) - 1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
