@@ -62,19 +62,14 @@ set(TINYUSB_SOURCES
 
 
 set(PROJECT_SOURCES
-    Src/main.c
     Src/stm32g4xx_hal_msp.c
     Src/stm32g4xx_it.c
     Src/usb_descriptors.c
     #Src/system_stm32g4xx.c
 )
 
-add_executable(stm32-fetch-g4 ${PROJECT_SOURCES} ${TINYUSB_SOURCES})
 
-target_include_directories(stm32-fetch-g4 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Inc ${CMAKE_CURRENT_SOURCE_DIR}/config ${CMAKE_CURRENT_SOURCE_DIR}/tinyusb/src ${CMAKE_CURRENT_SOURCE_DIR}/tinyusb/hw)
-
-target_link_libraries(stm32-fetch-g4
-    CMSIS::STM32::G474CE
+set(DEPS CMSIS::STM32::G474CE
     HAL::STM32::G4::GPIO
     HAL::STM32::G4::ADCEx
     HAL::STM32::G4::RCCEx
@@ -89,4 +84,23 @@ target_link_libraries(stm32-fetch-g4
     STM32::NoSys)
 
 
-stm32_print_size_of_target(stm32-fetch-g4)
+add_executable(stream_adc ${PROJECT_SOURCES} ${TINYUSB_SOURCES} Src/main.c)
+add_executable(midi ${PROJECT_SOURCES} ${TINYUSB_SOURCES} Src/midi.c)
+
+foreach(exe stream_adc midi)
+    target_include_directories(${exe}
+        PRIVATE 
+        ${CMAKE_CURRENT_SOURCE_DIR}/Inc 
+        ${CMAKE_CURRENT_SOURCE_DIR}/config 
+        ${CMAKE_CURRENT_SOURCE_DIR}/tinyusb/src 
+        ${CMAKE_CURRENT_SOURCE_DIR}/tinyusb/hw)
+
+
+    target_link_libraries(${exe}
+        ${DEPS})
+
+
+    stm32_print_size_of_target(${exe})
+endforeach()
+
+
