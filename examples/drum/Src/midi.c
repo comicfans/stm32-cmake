@@ -235,7 +235,7 @@ int main(void) {
 
     tud_task();
 
-    for (int adc_idx = 0; adc_idx < 2; ++adc_idx) {
+    for (int adc_idx = 0; adc_idx < ADC_HW_INSTANCE; ++adc_idx) {
       uint16_t dma_pos =
           ADC_INSTANCE_LENGTH - __HAL_DMA_GET_COUNTER(dma[adc_idx]);
 
@@ -249,8 +249,7 @@ int main(void) {
             continue;
           }
 
-          uint16_t v16 = (ADC_SAMPLE_BUFFER[adc_idx][j] << 4) |
-                         (ADC_SAMPLE_BUFFER[adc_idx][j] >> 8);
+          uint16_t v16 = ADC_SAMPLE_BUFFER[adc_idx][j];
 
           adc_segments[channel].val = v16;
           if (stream_out.segment_idx == 0) {
@@ -260,7 +259,7 @@ int main(void) {
             adc_segments[channel].min = MIN(v16, adc_segments[channel].min);
             adc_segments[channel].max = MAX(v16, adc_segments[channel].max);
           }
-          adc_stream_out(&stream_out, adc_segments[channel]);
+          // adc_stream_out(&stream_out, adc_segments[channel]);
         }
         cpu_pos[adc_idx] = end_pos % ADC_INSTANCE_LENGTH;
 

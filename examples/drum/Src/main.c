@@ -289,9 +289,7 @@ int main(void) {
             continue;
           }
 
-          uint16_t v16 = (ADC_SAMPLE_BUFFER[adc_idx][j] << 4) |
-                         (ADC_SAMPLE_BUFFER[adc_idx][j] >> 8);
-          // uint16_t v16 = (ADC_SAMPLE_BUFFER[adc_idx][j] << 4);
+          uint16_t v16 = ADC_SAMPLE_BUFFER[adc_idx][j];
 
           adc_segments[channel].val = v16;
           if (stream_out.segment_idx == 0) {
